@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <title>Diário de Triatlo - Treinamento</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; background-color: #f4f4f9; }
+        .card { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); max-width: 600px; margin: auto; text-align: center; }
+        .btn { padding: 15px 20px; color: white; border: none; border-radius: 5px; cursor: pointer; font-size: 16px; font-weight: bold; width: 100%; margin-top: 10px; }
+        .btn-cooper { background-color: #e74c3c; } 
+        .btn-rotina { background-color: #2ecc71; } 
+        .upload-area { margin: 20px 0; padding: 15px; border: 2px dashed #ccc; background-color: #fafafa; border-radius: 5px; }
+        .flash-msg { padding: 10px; margin-bottom: 15px; border-radius: 5px; font-weight: bold; }
+        .flash-success { background-color: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+        .flash-error { background-color: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
+        .regras-cooper { background-color: #fff3cd; color: #856404; padding: 15px; border-radius: 5px; border: 1px solid #ffeeba; text-align: left; font-size: 14px; margin-bottom: 20px;}
+    </style>
+</head>
+<body>
+
+    <div class="card">
+        <h2>Seu Painel de Treinamento</h2>
+        
+        <p style="color: #555; font-size: 18px;"><strong>Status:</strong> {{ mensagem_status }}</p>
+        
+        {% with messages = get_flashed_messages(with_categories=true) %}
+          {% if messages %}
+            {% for category, message in messages %}
+              <div class="flash-msg flash-{{ category }}">{{ message }}</div>
+            {% endfor %}
+          {% endif %}
+        {% endwith %}
+
+        <hr style="border: 1px solid #eee; margin: 20px 0;">
+
+        {% if precisa_novo_teste %}
+        <!-- INSTRUÇÕES DO TESTE DE COOPER -->
+        <div class="regras-cooper">
+            <h3 style="margin-top: 0;">🏃 TESTE DE 12'</h3>
+            <p><strong>ESSE TESTE SERÁ A BASE PARA CRIAÇÃO DAS SUAS ZONAS DE TREINAMENTO.</strong></p>
+            <p>É IMPORTANTE ESTAR DESCANSADO PARA REALIZAÇÃO DO MESMO. PROCURE REALIZAR EM UM LOCAL PLANO E SEM INTERRUPÇÕES.</p>
+            <p>PARA DEFINIÇÃO DAS ZONAS, SÓ PRECISO DO REGISTRO DOS 12', COM AS INFORMAÇÕES DA DISTÂNCIA PERCORRIDA E PACE MÉDIO. FC MÉDIA E MÁXIMA SÃO IMPORTANTES.</p>
+            
+            <h4>AQUECIMENTO:</h4>
+            <ul>
+                <li>5 MINUTOS TROTANDO.</li>
+                <li>8 X 20m ACELERANDO PROGRESSIVO, MAS NÃO MÁXIMO. RETORNE CAMINHANDO.</li>
+                <li>HIDRATAÇÃO.</li>
+                <li>DESCANSAR DE 3 A 5' ANTES DE INICIAR OS 12 MINUTOS.</li>
+            </ul>
+
+            <h4>12':</h4>
+            <p>REALIZAR EM ESFORÇO MÁXIMO. A SENSAÇÃO FINAL DEVE SER DE EXAUSTÃO TOTAL. CUIDADO PARA NÃO COMEÇAR MUITO FORTE; TENTE SER CONSTANTE.</p>
+            <p><strong>BOM TESTE!</strong></p>
+        </div>
+        {% endif %}
+
+        <form action="/upload" method="POST" enctype="multipart/form-data">
+            <div class="upload-area">
+                <label for="file"><strong>Selecione o arquivo do Garmin (.csv):</strong></label><br><br>
+                <input type="file" name="file" id="file" accept=".csv" required>
+            </div>
+
+            {% if precisa_novo_teste %}
+                <button type="submit" class="btn btn-cooper">
+                    ⚙️ Fazer Upload do Teste de Cooper (12 min)
+                </button>
+            {% else %}
+                <button type="submit" class="btn btn-rotina">
+                    📊 Enviar Treinos e Ajustar Planilha
+                </button>
+            {% endif %}
+        </form>
+    </div>
+
+</body>
+</html>

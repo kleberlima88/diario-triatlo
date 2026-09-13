@@ -1,0 +1,17 @@
+# Pastas e arquivos do Python (Ambiente Virtual, caches)
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+env/
+.env
+
+# Ignorar o nosso "banco de dados" local para evitar vazamento do seu perfil
+dados_usuario.json
+
+# Bloqueio ESTRITO de segurança: NUNCA enviar os arquivos de treino para o repositório público
+uploads/
+*.csv
+*.fit
+*.tcx
+*.gpx
