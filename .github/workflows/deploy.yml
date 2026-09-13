@@ -1,0 +1,20 @@
+name: Deploy to Oracle Cloud
+on:
+  push:
+    branches:
+      - main
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Executar comandos no Servidor via SSH
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.HOST }}
+          username: ${{ secrets.USERNAME }}
+          key: ${{ secrets.KEY }}
+          script: |
+            cd /home/ubuntu/projeto-aplicado-uncisal
+            git pull origin main
+            /home/ubuntu/projeto-aplicado-uncisal/venv/bin/pip install -r requirements.txt
+            sudo systemctl restart diario-triatlo.service
