@@ -17,61 +17,8 @@
     </style>
 </head>
 <body>
+    
+    <a href="/logout" style="float: right; color: red; text-decoration: none; font-weight: bold;">Sair (Logout)</a>
 
     <div class="card">
         <h2>Seu Painel de Treinamento</h2>
-        
-        <p style="color: #555; font-size: 18px;"><strong>Status:</strong> {{ mensagem_status }}</p>
-        
-        {% with messages = get_flashed_messages(with_categories=true) %}
-          {% if messages %}
-            {% for category, message in messages %}
-              <div class="flash-msg flash-{{ category }}">{{ message }}</div>
-            {% endfor %}
-          {% endif %}
-        {% endwith %}
-
-        <hr style="border: 1px solid #eee; margin: 20px 0;">
-
-        {% if precisa_novo_teste %}
-        <!-- INSTRUÇÕES DO TESTE DE COOPER -->
-        <div class="regras-cooper">
-            <h3 style="margin-top: 0;">🏃 TESTE DE 12'</h3>
-            <p><strong>ESSE TESTE SERÁ A BASE PARA CRIAÇÃO DAS SUAS ZONAS DE TREINAMENTO.</strong></p>
-            <p>É IMPORTANTE ESTAR DESCANSADO PARA REALIZAÇÃO DO MESMO. PROCURE REALIZAR EM UM LOCAL PLANO E SEM INTERRUPÇÕES.</p>
-            <p>PARA DEFINIÇÃO DAS ZONAS, SÓ PRECISO DO REGISTRO DOS 12', COM AS INFORMAÇÕES DA DISTÂNCIA PERCORRIDA E PACE MÉDIO. FC MÉDIA E MÁXIMA SÃO IMPORTANTES.</p>
-            
-            <h4>AQUECIMENTO:</h4>
-            <ul>
-                <li>5 MINUTOS TROTANDO.</li>
-                <li>8 X 20m ACELERANDO PROGRESSIVO, MAS NÃO MÁXIMO. RETORNE CAMINHANDO.</li>
-                <li>HIDRATAÇÃO.</li>
-                <li>DESCANSAR DE 3 A 5' ANTES DE INICIAR OS 12 MINUTOS.</li>
-            </ul>
-
-            <h4>12':</h4>
-            <p>REALIZAR EM ESFORÇO MÁXIMO. A SENSAÇÃO FINAL DEVE SER DE EXAUSTÃO TOTAL. CUIDADO PARA NÃO COMEÇAR MUITO FORTE; TENTE SER CONSTANTE.</p>
-            <p><strong>BOM TESTE!</strong></p>
-        </div>
-        {% endif %}
-
-        <form action="/upload" method="POST" enctype="multipart/form-data">
-            <div class="upload-area">
-                <label for="file"><strong>Selecione o arquivo do Garmin (.csv):</strong></label><br><br>
-                <input type="file" name="file" id="file" accept=".csv" required>
-            </div>
-
-            {% if precisa_novo_teste %}
-                <button type="submit" class="btn btn-cooper">
-                    ⚙️ Fazer Upload do Teste de Cooper (12 min)
-                </button>
-            {% else %}
-                <button type="submit" class="btn btn-rotina">
-                    📊 Enviar Treinos e Ajustar Planilha
-                </button>
-            {% endif %}
-        </form>
-    </div>
-
-</body>
-</html>

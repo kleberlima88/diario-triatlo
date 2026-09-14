@@ -1,12 +1,12 @@
-from flask import Flask, render_template, request, flash, redirect
+from flask import Flask, render_template, request, flash, redirect, session
 from werkzeug.utils import secure_filename
+from functools import wraps
 import os
 import json
 import csv
 import html
 from datetime import datetime
 
-# Tentativa de importação do Pandas com fallback resiliente para ambientes com Controle de Aplicativo do Windows
 try:
     import pandas as pd
     HAS_PANDAS = True
@@ -15,16 +15,13 @@ except Exception:
     HAS_PANDAS = False
 
 app = Flask(__name__)
-app.secret_key = "chave_super_secreta_projeto_uncisal" # Necessário para exibir mensagens de erro/sucesso na tela
+app.secret_key = "chave_super_secreta_projeto_uncisal" 
 
 # --- CINTURÃO DE SEGURANÇA (OWASP TOP 10) ---
-# 1. Limite de tamanho de arquivo: 2MB (Mitiga ataques de Negação de Serviço)
 app.config['MAX_CONTENT_LENGTH'] = 2 * 1024 * 1024 
-# 2. Extensões permitidas estritas
 ALLOWED_EXTENSIONS = {'csv'}
 app.config['UPLOAD_FOLDER'] = 'uploads'
 
-# Cria a pasta de uploads se ela não existir
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 
 def allowed_file(filename):
@@ -38,7 +35,42 @@ def carregar_dados_usuario():
             return json.load(f)
     return {"ultimo_teste_cooper": None, "historico_vam": []}
 
+# --- MITIGAÇÃO OWASP: Controle de Acesso Quebrado ---
+# Decorador para proteger rotas internas garantindo que apenas usuários com sessão ativa acessem
+def login_required(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if 'logado' not in session:
+            flash('Acesso negado. Por favor, faça login para acessar o painel.', 'error')
+            return redirect('/login')
+        return f(*args, **kwargs)
+    return decorated_function
+
+# --- ROTAS DE AUTENTICAÇÃO (EIXO 3) ---
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    if request.method == 'POST':
+        usuario = request.form.get('usuario')
+        senha = request.form.get('senha')
+        
+        # Mitigação OWASP (Injeção): Validação estrita sem concatenação de strings em banco de dados
+        if usuario == 'admin' and senha == 'triatlo2026':
+            session['logado'] = True
+            return redirect('/')
+        else:
+            flash('Credenciais inválidas. Tente novamente.', 'error')
+            
+    return render_template('login.html')
+
+@app.route('/logout')
+def logout():
+    session.pop('logado', None)
+    flash('Você saiu do sistema com sucesso.', 'success')
+    return redirect('/login')
+
+# --- ROTAS PROTEGIDAS ---
 @app.route('/')
+@login_required # Proteção ativada
 def painel_treinamento():
     dados = carregar_dados_usuario()
     precisa_novo_teste = False
@@ -52,14 +84,14 @@ def painel_treinamento():
         dias_passados = (datetime.now() - data_ultimo_teste).days
         if dias_passados >= 90:
             precisa_novo_teste = True
-            mensagem_status = f"Fim do Macrociclo! Já se passaram {dias_passados} dias. É hora de recalibrar seu pace com um novo Teste de Cooper."
+            mensagem_status = f"Fim do Macrociclo! Já se passaram {dias_passados} dias. É hora de recalibrar seu pace."
         else:
-            mensagem_status = f"Macrociclo ativo. Faltam {90 - dias_passados} dias para a sua próxima reavaliação de pace."
+            mensagem_status = f"Macrociclo ativo. Faltam {90 - dias_passados} dias para a sua próxima reavaliação."
 
     return render_template('painel.html', precisa_novo_teste=precisa_novo_teste, mensagem_status=mensagem_status)
 
-# --- ROTA DE RECEBIMENTO DO ARQUIVO ---
 @app.route('/upload', methods=['POST'])
+@login_required # Proteção ativada
 def upload_file():
     if 'file' not in request.files:
         flash('Nenhum arquivo detectado pelo sistema.', 'error')
@@ -76,19 +108,14 @@ def upload_file():
         caminho_salvo = os.path.join(app.config['UPLOAD_FOLDER'], filename)
         file.save(caminho_salvo)
         
-        # --- O CÉREBRO DA APLICAÇÃO (Processamento Pandas + Prompt IA) ---
         try:
             if HAS_PANDAS and pd is not None:
-                # Lê o arquivo CSV exportado do Garmin via Pandas
                 df = pd.read_csv(caminho_salvo)
-                
                 distancia_total = df['Distância'].sum() if 'Distância' in df.columns else "8.00"
                 fc_maxima = df['FC Máxima'].max() if 'FC Máxima' in df.columns else "187"
                 fc_media = df['FC Média'].mean() if 'FC Média' in df.columns else "175"
-                
                 tabela_html = df.head().to_html(classes='tabela-garmin', escape=True)
             else:
-                # Fallback nativo resiliente caso a política de segurança do Windows bloqueie DLLs do C/NumPy
                 encoding = "utf-8-sig"
                 try:
                     with open(caminho_salvo, "r", encoding="utf-8-sig") as f:
@@ -114,7 +141,6 @@ def upload_file():
                     except (ValueError, AttributeError):
                         return None
 
-                # Cálculo de valores ou padrões simulados
                 all_data = rows[1:] if len(rows) > 1 else []
                 dists = [parse_num(r[dist_idx]) for r in all_data if dist_idx is not None and dist_idx < len(r)]
                 dists = [d for d in dists if d is not None]
@@ -132,7 +158,6 @@ def upload_file():
                 tb_html = "".join("<tr>" + "".join(f"<td>{html.escape(str(cell))}</td>" for cell in r) + "</tr>" for r in data_rows)
                 tabela_html = f'<table class="tabela-garmin"><thead><tr>{th_html}</tr></thead><tbody>{tb_html}</tbody></table>'
             
-            # Montando a instrução fisiológica que será enviada para a API da IA
             prompt_ia = f"""
 Atue como um treinador especialista em periodização de triatlo e corrida.
 O atleta submeteu os seguintes dados executados:
@@ -141,7 +166,7 @@ O atleta submeteu os seguintes dados executados:
 - Frequência Cardíaca Média: {fc_media} bpm
 
 Analise o cumprimento das zonas de intensidade:
-Regra 1: Se os batimentos indicarem fadiga excessiva (comum após noites sem dormir ou desgaste físico extremo), sugira um microciclo regenerativo mantendo o esforço estritamente na Zona Z2.
+Regra 1: Se os batimentos indicarem fadiga excessiva, sugira um microciclo regenerativo mantendo o esforço estritamente na Zona Z2.
 Regra 2: Se o volume e os paces nas zonas Z2 e Z4 foram cumpridos com eficiência, aplique sobrecarga progressiva e aumente o volume do próximo longão em 10%.
 Gere a nova planilha da semana.
 """
@@ -156,4 +181,5 @@ Gere a nova planilha da semana.
         return redirect('/')
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    # Mitigação OWASP (Security Misconfiguration): debug desativado para produção
+    app.run(debug=False)
