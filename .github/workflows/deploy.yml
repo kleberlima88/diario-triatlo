@@ -15,7 +15,8 @@ jobs:
           key: ${{ secrets.KEY }}
           script: |
             cd /home/ubuntu/projeto-aplicado-uncisal
-            git pull origin main
+            git fetch origin
+            git reset --hard origin/main
             /home/ubuntu/projeto-aplicado-uncisal/venv/bin/pip install -r requirements.txt
             sudo pkill -f gunicorn || true
             sudo pkill -f python || true
