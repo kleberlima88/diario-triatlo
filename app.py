@@ -6,6 +6,24 @@ import json
 import csv
 import html
 from datetime import datetime
+from dotenv import load_dotenv
+
+# Carrega as variáveis de ambiente do arquivo .env
+load_dotenv()
+
+DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY")
+
+try:
+    from openai import OpenAI
+    HAS_OPENAI = True
+    client = OpenAI(
+        api_key=DEEPSEEK_API_KEY,
+        base_url="https://api.deepseek.com"
+    )
+except Exception:
+    OpenAI = None
+    HAS_OPENAI = False
+    client = None
 
 try:
     import pandas as pd
@@ -170,7 +188,38 @@ Regra 1: Se os batimentos indicarem fadiga excessiva, sugira um microciclo regen
 Regra 2: Se o volume e os paces nas zonas Z2 e Z4 foram cumpridos com eficiência, aplique sobrecarga progressiva e aumente o volume do próximo longão em 10%.
 Gere a nova planilha da semana.
 """
-            return render_template('analise.html', prompt=prompt_ia, tabela=tabela_html)
+
+            # Conexão com a API do DeepSeek usando a biblioteca openai (modelo 'deepseek-chat')
+            analise_ia = None
+            try:
+                if HAS_OPENAI and client is not None:
+                    resposta = client.chat.completions.create(
+                        model="deepseek-chat",
+                        messages=[
+                            {"role": "user", "content": prompt_ia}
+                        ]
+                    )
+                    analise_ia = resposta.choices[0].message.content
+                else:
+                    import urllib.request
+                    req = urllib.request.Request(
+                        "https://api.deepseek.com/chat/completions",
+                        headers={
+                            "Authorization": f"Bearer {DEEPSEEK_API_KEY}",
+                            "Content-Type": "application/json"
+                        },
+                        data=json.dumps({
+                            "model": "deepseek-chat",
+                            "messages": [{"role": "user", "content": prompt_ia}]
+                        }).encode("utf-8")
+                    )
+                    with urllib.request.urlopen(req, timeout=30) as resp:
+                        dados_resp = json.loads(resp.read().decode("utf-8"))
+                        analise_ia = dados_resp["choices"][0]["message"]["content"]
+            except Exception as e_ia:
+                flash(f'Aviso da API DeepSeek: {str(e_ia)}', 'error')
+
+            return render_template('analise.html', prompt=prompt_ia, resposta=analise_ia, tabela=tabela_html)
             
         except Exception as e:
             flash(f'Erro ao processar os dados da planilha: {str(e)}', 'error')

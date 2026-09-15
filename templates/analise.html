@@ -17,9 +17,26 @@
 
     <div class="card">
         <h2>🧠 Análise do Treinador Virtual (IA)</h2>
+        {% with messages = get_flashed_messages(with_categories=true) %}
+          {% if messages %}
+            {% for category, message in messages %}
+              <div style="padding: 10px; margin-bottom: 15px; border-radius: 5px; font-weight: bold; background-color: #fff3cd; color: #856404; border: 1px solid #ffeeba;">{{ message }}</div>
+            {% endfor %}
+          {% endif %}
+        {% endwith %}
+
+        {% if resposta %}
+        <p>Abaixo está o parecer do treinador e a prescrição gerados pela Inteligência Artificial (DeepSeek):</p>
+        <div class="prompt-box">{{ resposta }}</div>
+
+        <details style="margin-top: 15px; margin-bottom: 15px;">
+            <summary style="cursor: pointer; color: #555; font-weight: bold;">🔍 Ver prompt fisiológico enviado</summary>
+            <div class="prompt-box" style="font-size: 13px; margin-top: 8px; background-color: #34495e;">{{ prompt }}</div>
+        </details>
+        {% else %}
         <p>Abaixo está a instrução fisiológica gerada a partir dos dados do seu Garmin e que será processada pela Inteligência Artificial:</p>
-        
         <div class="prompt-box">{{ prompt }}</div>
+        {% endif %}
 
         <h3>Pré-visualização dos Dados Lidos (Pandas)</h3>
         <div style="overflow-x: auto;">
