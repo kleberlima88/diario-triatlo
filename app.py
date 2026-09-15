@@ -5,7 +5,7 @@ import os
 import json
 import csv
 import html
-from datetime import datetime
+from datetime import datetime, timedelta
 from dotenv import load_dotenv
 
 # Carrega as variáveis de ambiente do arquivo .env
@@ -37,6 +37,8 @@ app.secret_key = "chave_super_secreta_projeto_uncisal"
 
 # --- CINTURÃO DE SEGURANÇA (OWASP TOP 10) ---
 app.config['MAX_CONTENT_LENGTH'] = 2 * 1024 * 1024 
+app.config['SESSION_COOKIE_HTTPONLY'] = True   # Previne extração de cookie de sessão via XSS
+app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'  # Proteção de sessão contra CSRF
 ALLOWED_EXTENSIONS = {'csv'}
 app.config['UPLOAD_FOLDER'] = 'uploads'
 
@@ -53,12 +55,69 @@ def carregar_dados_usuario():
             return json.load(f)
     return {"ultimo_teste_cooper": None, "historico_vam": []}
 
-# --- MITIGAÇÃO OWASP: Controle de Acesso Quebrado ---
-# Decorador para proteger rotas internas garantindo que apenas usuários com sessão ativa acessem
+# --- MITIGAÇÃO OWASP: Rate Limiting & Proteção contra Força Bruta (A07:2021) ---
+# Armazena em memória as tentativas de login por IP
+TENTATIVAS_FALHAS = {}
+MAX_TENTATIVAS = 4
+TEMPO_BLOQUEIO_SEGUNDOS = 300  # Bloqueio temporário de 5 minutos
+
+def obter_ip_cliente():
+    """Recupera o IP real da requisição (com suporte a proxy reverso/Nginx)."""
+    if request.headers.get('X-Forwarded-For'):
+        return request.headers.get('X-Forwarded-For').split(',')[0].strip()
+    return request.remote_addr or '127.0.0.1'
+
+def verificar_bloqueio_ip(ip):
+    """Verifica se o IP está em período de bloqueio temporário."""
+    registro = TENTATIVAS_FALHAS.get(ip)
+    if not registro:
+        return False, 0
+    bloqueado_ate = registro.get('bloqueado_ate')
+    if bloqueado_ate:
+        segundos = (bloqueado_ate - datetime.now()).total_seconds()
+        if segundos > 0:
+            return True, int(segundos)
+        # Tempo expirou: remove bloqueio
+        TENTATIVAS_FALHAS.pop(ip, None)
+    return False, 0
+
+def registrar_falha_login(ip):
+    """Registra tentativa falha e ativa o bloqueio se atingir o limite."""
+    agora = datetime.now()
+    if ip not in TENTATIVAS_FALHAS:
+        TENTATIVAS_FALHAS[ip] = {'tentativas': 1, 'bloqueado_ate': None}
+    else:
+        TENTATIVAS_FALHAS[ip]['tentativas'] += 1
+
+    tentativas = TENTATIVAS_FALHAS[ip]['tentativas']
+    if tentativas >= MAX_TENTATIVAS:
+        TENTATIVAS_FALHAS[ip]['bloqueado_ate'] = agora + timedelta(seconds=TEMPO_BLOQUEIO_SEGUNDOS)
+        return True, TEMPO_BLOQUEIO_SEGUNDOS
+    return False, MAX_TENTATIVAS - tentativas
+
+def resetar_falhas_login(ip):
+    """Reseta as tentativas falhas após sucesso na autenticação."""
+    TENTATIVAS_FALHAS.pop(ip, None)
+
+# --- MITIGAÇÃO OWASP: Broken Access Control (A01:2021) - Secure by Design ---
+# Bloqueio global via before_request (Princípio do Default Deny)
+@app.before_request
+def bloquear_rotas_internas():
+    # Rotas públicas que não requerem autenticação
+    rotas_publicas = {'/login', '/favicon.ico'}
+    if request.path in rotas_publicas or request.path.startswith('/static'):
+        return None
+
+    # Bloqueia qualquer acesso às rotas internas se não houver sessão ativa
+    if not session.get('logado'):
+        flash('Acesso negado. Por favor, faça login para acessar o painel.', 'error')
+        return redirect('/login')
+
+# Decorador mantido como segunda camada de defesa (Defense in Depth)
 def login_required(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
-        if 'logado' not in session:
+        if not session.get('logado'):
             flash('Acesso negado. Por favor, faça login para acessar o painel.', 'error')
             return redirect('/login')
         return f(*args, **kwargs)
@@ -67,22 +126,53 @@ def login_required(f):
 # --- ROTAS DE AUTENTICAÇÃO (EIXO 3) ---
 @app.route('/login', methods=['GET', 'POST'])
 def login():
+    # Se já autenticado, redireciona para a tela principal
+    if session.get('logado'):
+        return redirect('/')
+
+    ip = obter_ip_cliente()
+
     if request.method == 'POST':
-        usuario = request.form.get('usuario')
-        senha = request.form.get('senha')
-        
-        # Mitigação OWASP (Injeção): Validação estrita sem concatenação de strings em banco de dados
+        # 1. Mitigação OWASP: Rate Limiting / Proteção contra Brute-Force
+        bloqueado, tempo_restante = verificar_bloqueio_ip(ip)
+        if bloqueado:
+            minutos = max(1, tempo_restante // 60)
+            flash(
+                f'Segurança OWASP: IP temporariamente bloqueado por excesso de tentativas. Aguarde {tempo_restante}s (~{minutos} min).',
+                'error'
+            )
+            return render_template('login.html'), 429
+
+        usuario = request.form.get('usuario', '').strip()
+        senha = request.form.get('senha', '')
+
+        # 2. Mitigação OWASP (A07:2021): Credenciais fixas e proteção de sessão
         if usuario == 'admin' and senha == 'triatlo2026':
+            resetar_falhas_login(ip)
+            session.clear()  # Previne Session Fixation
             session['logado'] = True
+            session['usuario'] = 'admin'
+            flash('Login realizado com sucesso.', 'success')
             return redirect('/')
         else:
-            flash('Credenciais inválidas. Tente novamente.', 'error')
-            
+            bloqueou_agora, info = registrar_falha_login(ip)
+            if bloqueou_agora:
+                flash(
+                    'Bloqueio de Segurança OWASP: 4 tentativas incorretas atingidas. Seu IP foi bloqueado temporariamente por 5 minutos.',
+                    'error'
+                )
+                return render_template('login.html'), 429
+            else:
+                flash(
+                    f'Credenciais inválidas. Você possui mais {info} tentativa(s) antes do bloqueio temporário.',
+                    'error'
+                )
+
     return render_template('login.html')
 
 @app.route('/logout')
 def logout():
-    session.pop('logado', None)
+    session.clear()
     flash('Você saiu do sistema com sucesso.', 'success')
     return redirect('/login')
 
